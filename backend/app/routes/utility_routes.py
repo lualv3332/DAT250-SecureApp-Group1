@@ -1,4 +1,7 @@
+import ipaddress
+import socket
 import traceback
+from urllib.parse import urlparse
 import requests
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse
@@ -24,17 +27,35 @@ def status(request: Request):
     )
 
 
+def is_safe_url(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, parsed.port or None)
+    except (socket.gaierror, ValueError):
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if not ip.is_global:
+            return False
+    return True
+
+
 @router.get("/resources/import", response_class=HTMLResponse)
 def import_resource_get(request: Request, url: str = ""):
     user = get_user_from_session(request)
     body = ""
     error = ""
     if url:
-        try:
-            r = requests.get(url, timeout=5)
-            body = r.text[:2000]
-        except Exception as exc:
-            error = str(exc)
+        if not is_safe_url(url):
+            error = "This URL is not allowed."
+        else:
+            try:
+                r = requests.get(url, timeout=5, allow_redirects=False)
+                body = r.text[:2000]
+            except Exception:
+                error = "Unable to fetch the resource."
     return templates.TemplateResponse(
         "resource_import.html",
         {"request": request, "user": user, "body": body, "url": url, "error": error},
