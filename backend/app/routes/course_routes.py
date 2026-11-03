@@ -23,11 +23,16 @@ def search_courses(request: Request, q: str = ""):
     if not user:
         return RedirectResponse("/login", status_code=302)
 
-    sql = f"SELECT * FROM courses WHERE title ILIKE '%{q}%' ORDER BY id"
+    # 1. PREPARE THE PARAMETER IN A SAFE WAY
+    search_param = f"%{q}%"
+
+    # 2. MAKE THE QUERY A PARAMETRIZED QUERY, NO F-STRING
+    sql = "SELECT * FROM courses WHERE title ILIKE %s ORDER BY id"
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(sql)
+            # 3. NOW HERE ADD THE PARAMETER FOR USING IT ON THE QUERY
+            cur.execute(sql, (search_param,))
             rows = cur.fetchall()
             cols = [d[0] for d in cur.description]
             courses = [dict(zip(cols, r)) for r in rows]
